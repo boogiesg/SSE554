@@ -150,7 +150,7 @@ namespace FileEncryption
 
         private void DecryptFile(string inFile)
         {
-                     
+
             RijndaelManaged rjndl = new RijndaelManaged();
             rjndl.KeySize = 256;
             rjndl.BlockSize = 256;
@@ -160,7 +160,7 @@ namespace FileEncryption
 
             //  file name for the decrypted file.
             string outFile = DecrFolder + inFile.Substring(0, inFile.LastIndexOf(".")) + ".txt";
-     
+
             using (FileStream inFs = new FileStream(EncrFolder + inFile, FileMode.Open))
             {
 
@@ -196,49 +196,55 @@ namespace FileEncryption
                 Directory.CreateDirectory(DecrFolder);
                 // Use RSACryptoServiceProvider
                 // to decrypt the Rijndael key.
-                byte[] KeyDecrypted = rsa.Decrypt(KeyEncrypted, false);
+                byte[] KeyDecrypted;
+                try
+                {
+                    KeyDecrypted = rsa.Decrypt(KeyEncrypted, false);
+                    ICryptoTransform transform = rjndl.CreateDecryptor(KeyDecrypted, IV);
+                    using (FileStream outFs = new FileStream(outFile, FileMode.Create))
+                    {
 
-                // Decrypt the key.
-                ICryptoTransform transform = rjndl.CreateDecryptor(KeyDecrypted, IV);
+                        int count = 0;
+                        int offset = 0;
 
-                // Decrypt the cipher text from
-                // from the FileSteam of the encrypted
-                // file (inFs) into the FileStream
-                // for the decrypted file (outFs).
-                using (FileStream outFs = new FileStream(outFile, FileMode.Create))
+                        // blockSizeBytes can be any arbitrary size.
+                        int blockSizeBytes = rjndl.BlockSize / 8;
+                        byte[] data = new byte[blockSizeBytes];
+
+
+                        // By decrypting a chunk a time,
+                        // you can save memory and
+                        // accommodate large files.
+
+                        // Start at the beginning
+                        // of the cipher text.
+                        inFs.Seek(startC, SeekOrigin.Begin);
+                        using (CryptoStream outStreamDecrypted = new CryptoStream(outFs, transform, CryptoStreamMode.Write))
+                        {
+                            do
+                            {
+                                count = inFs.Read(data, 0, blockSizeBytes);
+                                offset += count;
+                                outStreamDecrypted.Write(data, 0, count);
+
+                            }
+                            while (count > 0);
+
+                            outStreamDecrypted.FlushFinalBlock();
+                            outStreamDecrypted.Close();
+                        }
+                        outFs.Close();
+                    }
+                }
+                catch (CryptographicException e)
                 {
 
-                    int count = 0;
-                    int offset = 0;
-
-                    // blockSizeBytes can be any arbitrary size.
-                    int blockSizeBytes = rjndl.BlockSize / 8;
-                    byte[] data = new byte[blockSizeBytes];
-
-
-                    // By decrypting a chunk a time,
-                    // you can save memory and
-                    // accommodate large files.
-
-                    // Start at the beginning
-                    // of the cipher text.
-                    inFs.Seek(startC, SeekOrigin.Begin);
-                    using (CryptoStream outStreamDecrypted = new CryptoStream(outFs, transform, CryptoStreamMode.Write))
-                    {
-                        do
-                        {
-                            count = inFs.Read(data, 0, blockSizeBytes);
-                            offset += count;
-                            outStreamDecrypted.Write(data, 0, count);
-
-                        }
-                        while (count > 0);
-
-                        outStreamDecrypted.FlushFinalBlock();
-                        outStreamDecrypted.Close();
-                    }
-                    outFs.Close();
+                    Console.WriteLine("Cannot decrypt using just public key {0}", e);
                 }
+                // Decrypt the key.
+
+
+
                 inFs.Close();
             }
 
